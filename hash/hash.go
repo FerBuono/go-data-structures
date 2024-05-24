@@ -1,190 +1,185 @@
-package diccionario
+package hash
 
 import (
-	"fmt"
-	"hash/fnv"
-	//Link de la funcion de hash https://pkg.go.dev/hash/fnv?utm_source=gopls
+    "fmt"
+    "hash/fnv"
 )
 
 const (
-	_VACIO = iota
-	_OCUPADO
-	_BORRADO
+    _EMPTY = iota
+    _OCCUPIED
+    _DELETED
 
-	_CAP_INCIAL   = 32
-	_FACTOR_REDIM = 2
-	_CARGA_MAX    = 75
-	_CARGA_MIN    = 20
+    _INITIAL_CAPACITY = 32
+    _RESIZE_FACTOR    = 2
+    _MAX_LOAD_FACTOR  = 75
+    _MIN_LOAD_FACTOR  = 20
 )
 
-type elemento[K comparable, V any] struct {
-	estado int
-	clave  K
-	dato   V
-}
-type hashCerrado[K comparable, V any] struct {
-	elementos []elemento[K, V]
-	capacidad int
-	cantidad  int
-	borrados  int
+type element[K comparable, V any] struct {
+    state int
+    key   K
+    value V
 }
 
-type iterHashCerrado[K comparable, V any] struct {
-	dicc       *hashCerrado[K, V]
-	pos_actual int
+type closedHash[K comparable, V any] struct {
+    elements  []element[K, V]
+    capacity  int
+    count     int
+    deleted   int
 }
 
-func CrearHash[K comparable, V any]() Diccionario[K, V] {
-	dicc := new(hashCerrado[K, V])
-	dicc.capacidad = _CAP_INCIAL
-	dicc.elementos = make([]elemento[K, V], _CAP_INCIAL)
-	return dicc
+type closedHashIterator[K comparable, V any] struct {
+    dict      *closedHash[K, V]
+    curIndex  int
 }
 
-// Primitivas Diccionario
-
-func (dicc *hashCerrado[K, V]) Guardar(clave K, dato V) {
-	carga := ((dicc.cantidad + dicc.borrados) * 100) / dicc.capacidad
-	if carga > _CARGA_MAX {
-		dicc.redimension(dicc.capacidad * _FACTOR_REDIM)
-	}
-	pos := dicc.calcularPos(clave)
-	if dicc.elementos[pos].estado == _VACIO {
-		dicc.cantidad++
-	}
-	dicc.elementos[pos].estado = _OCUPADO
-	dicc.elementos[pos].clave = clave
-	dicc.elementos[pos].dato = dato
+func NewHash[K comparable, V any]() Dictionary[K, V] {
+    dict := new(closedHash[K, V])
+    dict.capacity = _INITIAL_CAPACITY
+    dict.elements = make([]element[K, V], _INITIAL_CAPACITY)
+    return dict
 }
 
-func (dicc *hashCerrado[K, V]) Pertenece(clave K) bool {
-	pos := dicc.calcularPos(clave)
-	return dicc.elementos[pos].estado == _OCUPADO
+// Dictionary methods
+
+func (dict *closedHash[K, V]) Save(key K, value V) {
+    load := ((dict.count + dict.deleted) * 100) / dict.capacity
+    if load > _MAX_LOAD_FACTOR {
+        dict.resize(dict.capacity * _RESIZE_FACTOR)
+    }
+    pos := dict.calculatePos(key)
+    if dict.elements[pos].state == _EMPTY {
+        dict.count++
+    }
+    dict.elements[pos].state = _OCCUPIED
+    dict.elements[pos].key = key
+    dict.elements[pos].value = value
 }
 
-func (dicc *hashCerrado[K, V]) Obtener(clave K) V {
-	pos := dicc.calcularPos(clave)
-	if dicc.elementos[pos].estado == _OCUPADO {
-		return dicc.elementos[pos].dato
-	} else {
-		panic("La clave no pertenece al diccionario")
-	}
+func (dict *closedHash[K, V]) Contains(key K) bool {
+    pos := dict.calculatePos(key)
+    return dict.elements[pos].state == _OCCUPIED
 }
 
-func (dicc *hashCerrado[K, V]) Borrar(clave K) V {
-	carga := (dicc.cantidad * 100) / dicc.capacidad
-	if carga < _CARGA_MIN && dicc.capacidad > _CAP_INCIAL {
-		dicc.redimension(dicc.capacidad / _FACTOR_REDIM)
-	}
-	pos := dicc.calcularPos(clave)
-	if dicc.elementos[pos].estado == _OCUPADO {
-		dicc.elementos[pos].estado = _BORRADO
-		dicc.cantidad--
-		dicc.borrados++
-	} else {
-		panic("La clave no pertenece al diccionario")
-	}
-	return dicc.elementos[pos].dato
+func (dict *closedHash[K, V]) Get(key K) V {
+    pos := dict.calculatePos(key)
+    if dict.elements[pos].state == _OCCUPIED {
+        return dict.elements[pos].value
+    } else {
+        panic("Key does not exist in the dictionary")
+    }
 }
 
-func (dicc *hashCerrado[K, V]) Cantidad() int {
-	return dicc.cantidad
+func (dict *closedHash[K, V]) Delete(key K) V {
+    load := (dict.count * 100) / dict.capacity
+    if load < _MIN_LOAD_FACTOR && dict.capacity > _INITIAL_CAPACITY {
+        dict.resize(dict.capacity / _RESIZE_FACTOR)
+    }
+    pos := dict.calculatePos(key)
+    fmt.Println(pos)
+    if dict.elements[pos].state == _OCCUPIED {
+        dict.elements[pos].state = _DELETED
+        dict.count--
+        dict.deleted++
+    } else {
+        panic("Key does not exist in the dictionary")
+    }
+    return dict.elements[pos].value
 }
 
-func (dicc *hashCerrado[K, V]) Iterar(visitar func(clave K, dato V) bool) {
-	for i := 0; i < dicc.capacidad; i++ {
-		elem := dicc.elementos[i]
-		if elem.estado == _OCUPADO && !visitar(elem.clave, elem.dato) {
-			return
-		}
-	}
+func (dict *closedHash[K, V]) Size() int {
+    return dict.count
 }
 
-func (dicc *hashCerrado[K, V]) Iterador() IterDiccionario[K, V] {
-	iterador := new(iterHashCerrado[K, V])
-	iterador.dicc = dicc
-	iterador.pos_actual = 0
-	if dicc.elementos[0].estado != _OCUPADO {
-		iterador.pos_actual = iterador.buscarSiguiente()
-	}
-	return iterador
+func (dict *closedHash[K, V]) Iterate(visitor func(key K, value V) bool) {
+    for i := 0; i < dict.capacity; i++ {
+        elem := dict.elements[i]
+        if elem.state == _OCCUPIED && !visitor(elem.key, elem.value) {
+            return
+        }
+    }
 }
 
-//Primitivas de IterDiccionario
-
-func (iter *iterHashCerrado[K, V]) HaySiguiente() bool {
-	/*for i := iter.pos_actual; i < iter.dicc.capacidad; i++ {
-		if iter.dicc.elementos[i].estado == _OCUPADO {
-			return true
-		}
-	}
-	return false*/
-	return iter.pos_actual != iter.dicc.capacidad
+func (dict *closedHash[K, V]) Iterator() DictionaryIterator[K, V] {
+    iterator := new(closedHashIterator[K, V])
+    iterator.dict = dict
+    iterator.curIndex = 0
+    if dict.elements[0].state != _OCCUPIED {
+        iterator.curIndex = iterator.findNext()
+    }
+    return iterator
 }
 
-func (iter *iterHashCerrado[K, V]) VerActual() (K, V) {
-	if !iter.HaySiguiente() {
-		panic("El iterador termino de iterar")
-	}
-	return iter.dicc.elementos[iter.pos_actual].clave, iter.dicc.elementos[iter.pos_actual].dato
+// DictionaryIterator methods
+
+func (iter *closedHashIterator[K, V]) HasNext() bool {
+    return iter.curIndex != iter.dict.capacity
 }
 
-func (iter *iterHashCerrado[K, V]) Siguiente() K {
-	if iter.pos_actual == iter.dicc.capacidad {
-		panic("El iterador termino de iterar")
-	}
-	clave_act := iter.dicc.elementos[iter.pos_actual].clave
-	iter.pos_actual = iter.buscarSiguiente()
-	return clave_act
+func (iter *closedHashIterator[K, V]) Current() (K, V) {
+    if !iter.HasNext() {
+        panic("Iterator has finished iterating")
+    }
+    return iter.dict.elements[iter.curIndex].key, iter.dict.elements[iter.curIndex].value
 }
 
-// Funciones / métodos auxiliares
-
-func convertirABytes[K comparable](clave K) []byte {
-	return []byte(fmt.Sprintf("%v", clave))
+func (iter *closedHashIterator[K, V]) Next() K {
+    if iter.curIndex == iter.dict.capacity {
+        panic("Iterator has finished iterating")
+    }
+    currentKey := iter.dict.elements[iter.curIndex].key
+    iter.curIndex = iter.findNext()
+    return currentKey
 }
 
-func hash(clave []byte) uint64 {
-	x := fnv.New64a()
-	x.Write(clave)
-	return x.Sum64()
+// Auxiliary functions / methods
+
+func convertToBytes[K comparable](key K) []byte {
+    return []byte(fmt.Sprintf("%v", key))
 }
 
-func (dicc *hashCerrado[K, V]) calcularPos(clave K) uint64 {
-	pos := hash(convertirABytes(clave)) % uint64(dicc.capacidad)
-	for dicc.elementos[pos].estado != _VACIO {
-		if dicc.elementos[pos].clave == clave && dicc.elementos[pos].estado == _OCUPADO {
-			return pos
-		}
-		if pos+1 == uint64(dicc.capacidad) {
-			pos = 0
-		} else {
-			pos++
-		}
-	}
-	return pos
+func hash(key []byte) uint64 {
+    h := fnv.New64a()
+    h.Write(key)
+    return h.Sum64()
 }
 
-func (dicc *hashCerrado[K, V]) redimension(nueva_cap int) {
-	vieja_cap := dicc.capacidad
-	elementos := dicc.elementos
-	dicc.elementos = make([]elemento[K, V], nueva_cap)
-	dicc.borrados = 0
-	dicc.capacidad = nueva_cap
-	for i := 0; i < vieja_cap; i++ {
-		if elementos[i].estado != _OCUPADO {
-			continue
-		}
-		pos := dicc.calcularPos(elementos[i].clave)
-		dicc.elementos[pos] = elementos[i]
-	}
+func (dict *closedHash[K, V]) calculatePos(key K) uint64 {
+    pos := hash(convertToBytes(key)) % uint64(dict.capacity)
+    for dict.elements[pos].state != _EMPTY {
+        if dict.elements[pos].key == key && dict.elements[pos].state == _OCCUPIED {
+            return pos
+        }
+        if pos+1 == uint64(dict.capacity) {
+            pos = 0
+        } else {
+            pos++
+        }
+    }
+    return pos
 }
 
-func (iter *iterHashCerrado[K, V]) buscarSiguiente() int {
-	for i := iter.pos_actual + 1; i < iter.dicc.capacidad; i++ {
-		if iter.dicc.elementos[i].estado == _OCUPADO {
-			return i
-		}
-	}
-	return iter.dicc.capacidad
+func (dict *closedHash[K, V]) resize(newCapacity int) {
+    oldCapacity := dict.capacity
+    oldElements := dict.elements
+    dict.elements = make([]element[K, V], newCapacity)
+    dict.deleted = 0
+    dict.capacity = newCapacity
+    for i := 0; i < oldCapacity; i++ {
+        if oldElements[i].state != _OCCUPIED {
+            continue
+        }
+        pos := dict.calculatePos(oldElements[i].key)
+        dict.elements[pos] = oldElements[i]
+    }
+}
+
+func (iter *closedHashIterator[K, V]) findNext() int {
+    for i := iter.curIndex + 1; i < iter.dict.capacity; i++ {
+        if iter.dict.elements[i].state == _OCCUPIED {
+            return i
+        }
+    }
+    return iter.dict.capacity
 }

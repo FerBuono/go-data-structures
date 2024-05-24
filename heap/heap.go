@@ -1,147 +1,149 @@
-package cola_prioridad
+package heap
 
-const _CAPACIDAD_INICIAL = 10
-const _VECES_A_AUMENTAR = 2
-const _VECES_A_REDUCIR = 2
-const _VALOR_PARA_REDUCIR = 4
+const initialCapacity = 10
+const increaseFactor = 2
+const decreaseFactor = 2
+const reduceThreshold = 4
+
 
 type heap[T comparable] struct {
-	datos    []T
-	cantidad int
-	cmp      func(T, T) int
+    data     []T
+    count    int
+    compare  func(T, T) int
 }
 
-func CrearHeap[T comparable](funcion_cmp func(T, T) int) ColaPrioridad[T] {
-	heap := new(heap[T])
-	heap.datos = make([]T, _CAPACIDAD_INICIAL)
-	heap.cmp = funcion_cmp
-	heap.cantidad = 0
-	return heap
+func NewHeap[T comparable](compare func(T, T) int) PriorityQueue[T] {
+    h := &heap[T]{
+        data:    make([]T, initialCapacity),
+        compare: compare,
+    }
+    return h
 }
 
-func CrearHeapArr[T comparable](arreglo []T, funcion_cmp func(T, T) int) ColaPrioridad[T] {
-	heap := new(heap[T])
-	heap.datos = make([]T, max(_CAPACIDAD_INICIAL, len(arreglo)))
-	copy(heap.datos, arreglo)
-	heap.cmp = funcion_cmp
-	heap.cantidad = len(arreglo)
-	heapify(heap.datos, funcion_cmp)
-	return heap
+func NewHeapFromArray[T comparable](array []T, compare func(T, T) int) PriorityQueue[T] {
+    h := &heap[T]{
+        data:    make([]T, max(initialCapacity, len(array))),
+        count:   len(array),
+        compare: compare,
+    }
+    copy(h.data, array)
+    heapify(h.data, compare)
+    return h
 }
 
-func HeapSort[T comparable](elementos []T, funcion_cmp func(T, T) int) {
-	heapify(elementos, funcion_cmp)
-	for i := 0; i < len(elementos); i++ {
-		swap(&elementos[0], &elementos[len(elementos)-1-i])
-		downheap(elementos[:len(elementos)-1-i], 0, funcion_cmp, len(elementos)-1-i)
-	}
+func HeapSort[T comparable](elements []T, compare func(T, T) int) {
+    heapify(elements, compare)
+    for i := 0; i < len(elements); i++ {
+        swap(&elements[0], &elements[len(elements)-1-i])
+        downheap(elements[:len(elements)-1-i], 0, compare, len(elements)-1-i)
+    }
 }
 
-// Métodos de ColaPrioridad
+// PriorityQueue methods
 
-func (h *heap[T]) EstaVacia() bool {
-	return h.cantidad == 0
+func (h *heap[T]) IsEmpty() bool {
+    return h.count == 0
 }
 
-func (h *heap[T]) Encolar(elemento T) {
-	if h.cantidad == cap(h.datos) {
-		h.redimensionar(cap(h.datos) * _VECES_A_AUMENTAR)
-	}
-	h.datos[h.cantidad] = elemento
-	h.cantidad++
-	upheap(h.datos, h.cantidad-1, h.cmp)
+func (h *heap[T]) Enqueue(element T) {
+    if h.count == cap(h.data) {
+        h.resize(cap(h.data) * increaseFactor)
+    }
+    h.data[h.count] = element
+    h.count++
+    upheap(h.data, h.count-1, h.compare)
 }
 
-func (h *heap[T]) VerMax() T {
-	if h.EstaVacia() {
-		panic("La cola esta vacia")
-	}
-	return h.datos[0]
+func (h *heap[T]) Peek() T {
+    if h.IsEmpty() {
+        panic("The queue is empty")
+    }
+    return h.data[0]
 }
 
-func (h *heap[T]) Desencolar() T {
-	if h.EstaVacia() {
-		panic("La cola esta vacia")
-	}
-	if h.cantidad <= cap(h.datos)/_VALOR_PARA_REDUCIR && cap(h.datos) > _CAPACIDAD_INICIAL {
-		h.redimensionar(cap(h.datos) / _VECES_A_REDUCIR)
-	}
-	dato := h.datos[0]
-	swap(&h.datos[0], &h.datos[h.cantidad-1])
-	h.cantidad--
-	downheap(h.datos, 0, h.cmp, h.cantidad)
-	return dato
+func (h *heap[T]) Dequeue() T {
+    if h.IsEmpty() {
+        panic("The queue is empty")
+    }
+    if h.count <= cap(h.data)/reduceThreshold && cap(h.data) > initialCapacity {
+        h.resize(cap(h.data) / decreaseFactor)
+    }
+    item := h.data[0]
+    swap(&h.data[0], &h.data[h.count-1])
+    h.count--
+    downheap(h.data, 0, h.compare, h.count)
+    return item
 }
 
-func (h *heap[T]) Cantidad() int {
-	return h.cantidad
+func (h *heap[T]) Size() int {
+    return h.count
 }
 
-// Métodos / funciones auxiliares
+// Auxiliary methods/functions
 
-func upheap[T comparable](datos []T, pos_hijo int, func_cmp func(T, T) int) {
-	if pos_hijo <= 0 {
-		return
-	}
-	pos_padre := (pos_hijo - 1) / 2
-	if func_cmp(datos[pos_padre], datos[pos_hijo]) < 0 {
-		swap(&datos[pos_padre], &datos[pos_hijo])
-		upheap(datos, pos_padre, func_cmp)
-	}
+func upheap[T comparable](data []T, childIndex int, compare func(T, T) int) {
+    if childIndex <= 0 {
+        return
+    }
+    parentIndex := (childIndex - 1) / 2
+    if compare(data[parentIndex], data[childIndex]) < 0 {
+        swap(&data[parentIndex], &data[childIndex])
+        upheap(data, parentIndex, compare)
+    }
 }
 
-func downheap[T comparable](datos []T, pos_padre int, func_cmp func(T, T) int, cantDatos int) {
-	if pos_padre >= cantDatos {
-		return
-	}
-	pos_hijo_izq := 2*pos_padre + 1
-	pos_hijo_der := 2*pos_padre + 2
-	if pos_hijo_izq >= cantDatos && pos_hijo_der >= cantDatos {
-		return
-	}
-	var pos_reemplazo int
-	if pos_hijo_der >= cantDatos {
-		pos_reemplazo = buscarReemplazo(datos, pos_padre, pos_hijo_izq, pos_hijo_izq, func_cmp)
-	} else {
-		pos_reemplazo = buscarReemplazo(datos, pos_padre, pos_hijo_izq, pos_hijo_der, func_cmp)
-	}
-	if pos_reemplazo >= cantDatos {
-		return
-	}
-	if pos_reemplazo != pos_padre {
-		swap(&datos[pos_padre], &datos[pos_reemplazo])
-		downheap(datos, pos_reemplazo, func_cmp, cantDatos)
-	}
+func downheap[T comparable](data []T, parentIndex int, compare func(T, T) int, count int) {
+    if parentIndex >= count {
+        return
+    }
+    leftChildIndex := 2*parentIndex + 1
+    rightChildIndex := 2*parentIndex + 2
+    if leftChildIndex >= count && rightChildIndex >= count {
+        return
+    }
+    var replacementIndex int
+    if rightChildIndex >= count {
+        replacementIndex = findReplacement(data, parentIndex, leftChildIndex, leftChildIndex, compare)
+    } else {
+        replacementIndex = findReplacement(data, parentIndex, leftChildIndex, rightChildIndex, compare)
+    }
+    if replacementIndex >= count {
+        return
+    }
+    if replacementIndex != parentIndex {
+        swap(&data[parentIndex], &data[replacementIndex])
+        downheap(data, replacementIndex, compare, count)
+    }
 }
 
-func heapify[T comparable](arr []T, func_cmp func(T, T) int) {
-	for i := len(arr) - 1; i >= 0; i-- {
-		downheap(arr, i, func_cmp, len(arr))
-	}
+func heapify[T comparable](arr []T, compare func(T, T) int) {
+    for i := len(arr) - 1; i >= 0; i-- {
+        downheap(arr, i, compare, len(arr))
+    }
 }
 
-func buscarReemplazo[T comparable](datos []T, pos_padre, pos_hijo_izq, pos_hijo_der int, func_cmp func(T, T) int) int {
-	if func_cmp(datos[pos_hijo_der], datos[pos_padre]) > 0 && func_cmp(datos[pos_hijo_der], datos[pos_hijo_izq]) >= 0 {
-		return pos_hijo_der
-	} else if func_cmp(datos[pos_hijo_izq], datos[pos_padre]) > 0 && func_cmp(datos[pos_hijo_izq], datos[pos_hijo_der]) > 0 {
-		return pos_hijo_izq
-	}
-	return pos_padre
+func findReplacement[T comparable](data []T, parentIndex, leftChildIndex, rightChildIndex int, compare func(T, T) int) int {
+    if compare(data[rightChildIndex], data[parentIndex]) > 0 && compare(data[rightChildIndex], data[leftChildIndex]) >= 0 {
+        return rightChildIndex
+    } else if compare(data[leftChildIndex], data[parentIndex]) > 0 && compare(data[leftChildIndex], data[rightChildIndex]) > 0 {
+        return leftChildIndex
+    }
+    return parentIndex
 }
 
-func (h *heap[T]) redimensionar(nuevaCapacidad int) {
-	nueva := make([]T, nuevaCapacidad)
-	copy(nueva, h.datos)
-	h.datos = nueva
+func (h *heap[T]) resize(newCapacity int) {
+    newData := make([]T, newCapacity)
+    copy(newData, h.data)
+    h.data = newData
 }
 
 func swap[T comparable](x, y *T) {
-	*x, *y = *y, *x
+    *x, *y = *y, *x
 }
 
-func max(valor1 int, valor2 int) int {
-	if valor1 > valor2 {
-		return valor1
-	}
-	return valor2
+func max(a, b int) int {
+    if a > b {
+        return a
+    }
+    return b
 }
